@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --font-fraunces: 'Fraunces', Georgia, serif;
+  --font-work-sans: 'Work Sans', -apple-system, sans-serif;
+
+  --color-black: #0a0a0a;
+  --color-white: #ffffff;
+  --color-off-white: #f8f6f1;
+  --color-gray-100: #f4f4f4;
+  --color-gray-200: #e8e8e8;
+  --color-gray-400: #9a9a9a;
+  --color-gray-600: #555555;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-work-sans);
+  background: #ffffff;
+  color: var(--color-black);
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-fraunces);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-gray-100); }
+::-webkit-scrollbar-thumb { background: var(--color-gray-400); border-radius: 3px; }
+
+/* Range sliders */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+input[type='range']::-webkit-slider-track {
+  background: #e8e8e8;
+  height: 4px;
+  border-radius: 2px;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #0a0a0a;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  margin-top: -6px;
+  transition: transform 0.1s;
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+input[type='range']:focus { outline: none; }
+
+/* Preset card */
+.preset-card { transition: all 0.15s ease; }
+.preset-card:hover { transform: translateY(-2px); }
