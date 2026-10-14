@@ -4,7 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Quin-Echo — Real-Time Voice Changer',
   description:
-    'Change your voice live on WhatsApp, Discord, and Zoom. Browser-based, zero installs, multiple voice presets.',
+    'Change your voice live on WhatsApp, Discord, and Zoom. Local audio effects, voice presets, recording, and virtual cable routing for desktop calls.',
   keywords: ['voice changer', 'real-time', 'WhatsApp', 'Discord', 'live calls'],
   openGraph: {
     title: 'Quin-Echo',

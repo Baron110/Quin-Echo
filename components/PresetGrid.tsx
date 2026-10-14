@@ -11,12 +11,13 @@ interface PresetGridProps {
 
 export default function PresetGrid({ active, onChange, disabled }: PresetGridProps) {
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {PRESETS.map((preset) => (
         <button
           key={preset.name}
           onClick={() => !disabled && onChange(preset.name)}
           disabled={disabled}
+          aria-pressed={active === preset.name}
           className={`preset-card flex flex-col items-center gap-1.5 p-4 rounded-xl border transition-all text-left
             ${
               active === preset.name

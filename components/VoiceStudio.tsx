@@ -1,160 +1,170 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { getEngine } from '@/lib/audio/engine';
+import { useEffect, useRef, useState } from 'react';
+import { AudioEngine } from '@/lib/audio/engine';
 import { getPreset } from '@/lib/audio/presets';
-import type { PresetName, AudioSettings, ProcessorStatus } from '@/types/audio';
+import type { PresetName, AudioSettings } from '@/types/audio';
 import Visualizer from './Visualizer';
 import PresetGrid from './PresetGrid';
 import AudioSliders from './AudioSliders';
 
-const DEFAULT_SETTINGS: AudioSettings = {
-  pitch: 0,
-  formant: 1.0,
-  distortion: 0,
-  reverb: 0,
-  volume: 1.0,
-};
+type RoutableAudio = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
 
 export default function VoiceStudio() {
+  const engine = useRef<AudioEngine | null>(null);
+  const playback = useRef<RoutableAudio | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const recordingUrl = useRef('');
   const [active, setActive] = useState(false);
-  const [status, setStatus] = useState<ProcessorStatus>('idle');
-  const [activePreset, setActivePreset] = useState<PresetName>('normal');
-  const [settings, setSettings] = useState<AudioSettings>(DEFAULT_SETTINGS);
-  const [usingWorklet, setUsingWorklet] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [preset, setPreset] = useState<PresetName>('normal');
+  const [settings, setSettings] = useState<AudioSettings>(getPreset('normal'));
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const engineRef = useRef(getEngine());
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [input, setInput] = useState('');
+  const [output, setOutput] = useState('');
+  const [listening, setListening] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [clip, setClip] = useState('');
+  const [canRoute, setCanRoute] = useState(false);
 
-  const toggleMic = useCallback(async () => {
-    const engine = engineRef.current;
+  useEffect(() => {
+    engine.current = new AudioEngine();
+    playback.current = new Audio() as RoutableAudio;
+    setCanRoute(typeof playback.current.setSinkId === 'function');
+    const refresh = () => navigator.mediaDevices?.enumerateDevices().then(setDevices).catch(() => {});
+    refresh();
+    navigator.mediaDevices?.addEventListener('devicechange', refresh);
+    return () => {
+      navigator.mediaDevices?.removeEventListener('devicechange', refresh);
+      if (recorder.current?.state === 'recording') {
+        recorder.current.onstop = null;
+        recorder.current.stop();
+      }
+      playback.current?.pause();
+      if (playback.current) playback.current.srcObject = null;
+      engine.current?.stop();
+      if (recordingUrl.current) URL.revokeObjectURL(recordingUrl.current);
+    };
+  }, []);
 
+  async function toggleMic() {
+    if (busy) return;
+    setError('');
     if (active) {
-      engine.stop();
-      setActive(false);
-      setStatus('idle');
-      setAnalyser(null);
-      setUsingWorklet(false);
-    } else {
-      try {
-        setStatus('idle');
-        engine.onStatusChange = setStatus;
-        await engine.start();
-        engine.applyPreset(getPreset(activePreset));
-        setAnalyser(engine.getAnalyser());
-        setUsingWorklet(engine.isUsingWorklet());
-        setActive(true);
-      } catch (err) {
-        console.error(err);
-        setStatus('error');
-      }
+      if (recorder.current?.state === 'recording') recorder.current.stop();
+      playback.current?.pause();
+      if (playback.current) playback.current.srcObject = null;
+      engine.current?.stop();
+      setActive(false); setListening(false); setAnalyser(null); setOutput('');
+      return;
     }
-  }, [active, activePreset]);
+    setBusy(true);
+    try {
+      const stream = await engine.current!.start(input || undefined);
+      engine.current!.applyPreset(getPreset(preset));
+      engine.current!.updateSettings(settings);
+      playback.current!.srcObject = stream;
+      setAnalyser(engine.current!.getAnalyser());
+      setActive(true);
+      setDevices(await navigator.mediaDevices.enumerateDevices());
+    } catch (err) {
+      engine.current?.stop();
+      setActive(false); setAnalyser(null);
+      setError(err instanceof Error ? err.message : 'Unable to start microphone.');
+    } finally { setBusy(false); }
+  }
 
-  const handlePresetChange = useCallback(
-    (name: PresetName) => {
-      setActivePreset(name);
-      const preset = getPreset(name);
-      setSettings({
-        pitch: preset.pitch,
-        formant: preset.formant,
-        distortion: preset.distortion,
-        reverb: preset.reverb,
-        volume: preset.volume,
-      });
-      if (active) {
-        engineRef.current.applyPreset(preset);
+  async function route(id: string) {
+    setError(''); setBusy(true);
+    const audio = playback.current!;
+    audio.pause(); setListening(false); setOutput('');
+    try {
+      if (id) {
+        if (!audio.setSinkId) throw new Error('Output selection is unavailable in this browser.');
+        await audio.setSinkId(id);
+        await audio.play();
+        setOutput(id);
       }
-    },
-    [active],
-  );
+    } catch (err) {
+      audio.pause();
+      setError(err instanceof Error ? err.message : 'Could not route audio.');
+    } finally { setBusy(false); }
+  }
 
-  const handleSliderChange = useCallback(
-    (key: keyof AudioSettings, value: number) => {
-      setSettings((prev) => {
-        const next = { ...prev, [key]: value };
-        if (active) engineRef.current.updateSettings({ [key]: value });
-        return next;
-      });
-    },
-    [active],
-  );
+  async function monitor() {
+    if (listening) { playback.current?.pause(); setListening(false); return; }
+    setBusy(true); setError('');
+    try {
+      await playback.current?.setSinkId?.('');
+      await playback.current!.play();
+      setListening(true);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Playback failed.'); }
+    finally { setBusy(false); }
+  }
 
-  const statusLabel =
-    status === 'active'
-      ? usingWorklet
-        ? '⚡ Phase Vocoder Active'
-        : '✓ Processing Active'
-      : status === 'error'
-        ? '✕ Mic Error — Check Permissions'
-        : '○ Idle';
+  function record() {
+    setError('');
+    if (recording) { recorder.current?.stop(); return; }
+    try {
+      if (typeof MediaRecorder === 'undefined') throw new Error('Recording is unavailable in this browser.');
+      const next = new MediaRecorder(engine.current!.getOutputStream()!);
+      const chunks: Blob[] = [];
+      next.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+      next.onstop = () => {
+        if (recordingUrl.current) URL.revokeObjectURL(recordingUrl.current);
+        const url = URL.createObjectURL(new Blob(chunks, { type: next.mimeType }));
+        recordingUrl.current = url; setClip(url); setRecording(false);
+      };
+      next.onerror = () => { setError('Recording failed. Try again.'); setRecording(false); };
+      next.start(); recorder.current = next; setRecording(true);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Recording failed.'); }
+  }
 
-  const statusColor =
-    status === 'active' ? 'text-black' : status === 'error' ? 'text-red-600' : 'text-gray-400';
+  function change(key: keyof AudioSettings, value: number) {
+    setSettings((previous) => ({ ...previous, [key]: value }));
+    if (active) engine.current?.updateSettings({ [key]: value });
+  }
 
+  const selectClass = 'w-full rounded-lg border border-gray-300 bg-white p-3 text-sm';
+  const buttonClass = 'rounded-full border border-black px-4 py-2 text-sm font-semibold disabled:opacity-40';
   return (
-    <div className="space-y-8">
-      {/* Waveform */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs uppercase tracking-widest text-gray-500 font-semibold">
-            Waveform
-          </span>
-          <span className={`text-xs font-mono ${statusColor}`}>{statusLabel}</span>
+    <div className="space-y-6">
+      <div className="flex justify-between text-xs uppercase tracking-widest"><span>Live signal</span><span role="status">{busy ? 'Connecting...' : active ? 'Processing' : 'Mic off'}</span></div>
+      <Visualizer analyser={analyser} active={active} />
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <div className="space-y-3">
+        <label className="block text-sm font-semibold" htmlFor="mic-input">1. Choose your microphone</label>
+        <select id="mic-input" className={selectClass} value={input} disabled={active || busy} onChange={(event) => setInput(event.target.value)}>
+          <option value="">Default microphone</option>
+          {devices.filter((device) => device.kind === 'audioinput' && device.deviceId).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+        </select>
+        <button className={`${buttonClass} bg-black text-white`} disabled={busy} onClick={toggleMic}>{busy ? 'Connecting...' : active ? 'Stop microphone' : 'Start microphone'}</button>
+      </div>
+      <div className="space-y-3">
+        <p className="text-sm font-semibold">2. Shape your voice</p>
+        <PresetGrid active={preset} onChange={(name) => { setPreset(name); setSettings(getPreset(name)); if (active) engine.current?.applyPreset(getPreset(name)); }} />
+        <AudioSliders pitch={settings.pitch} reverb={settings.reverb} distortion={settings.distortion} volume={settings.volume} onPitch={(value) => change('pitch', value)} onReverb={(value) => change('reverb', value)} onDistortion={(value) => change('distortion', value)} onVolume={(value) => change('volume', value)} />
+      </div>
+      <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+        <p className="text-sm font-semibold">3. Test your voice</p>
+        <p className="text-xs text-gray-600">Use headphones for live monitoring. Record a short clip to check the effect without speaker feedback.</p>
+        <div className="flex flex-wrap gap-2">
+          <button className={buttonClass} disabled={!active || busy || !!output} onClick={monitor}>{listening ? 'Stop listening' : 'Listen on headphones'}</button>
+          <button className={buttonClass} disabled={!active || busy} onClick={record}>{recording ? 'Finish recording' : 'Record test clip'}</button>
         </div>
-        <Visualizer analyser={analyser} active={active} />
+        {recording && <p role="status" className="text-sm">Recording processed audio...</p>}
+        {clip && <div className="space-y-2"><audio controls src={clip} className="w-full" /><a href={clip} download="quin-echo-test" className="text-sm underline">Download recording</a></div>}
       </div>
-
-      {/* Mic toggle */}
-      <div className="flex items-center justify-between p-5 border border-gray-200 rounded-xl">
-        <div>
-          <p className="font-semibold text-sm">Microphone</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {active ? 'Click to stop voice processing' : 'Click to activate voice changer'}
-          </p>
-        </div>
-        <button
-          onClick={toggleMic}
-          className={`relative flex items-center gap-2.5 px-6 py-3 rounded-full text-sm font-semibold transition-all
-            ${
-              active
-                ? 'bg-black text-white'
-                : 'bg-white text-black border-2 border-black hover:bg-black hover:text-white'
-            }
-          `}
-        >
-          {active && (
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
-            </span>
-          )}
-          {active ? 'Stop' : 'Start Mic'}
-        </button>
-      </div>
-
-      {/* Preset grid */}
-      <div>
-        <p className="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-3">
-          Voice Presets
-        </p>
-        <PresetGrid active={activePreset} onChange={handlePresetChange} />
-      </div>
-
-      {/* Sliders */}
-      <div className="p-5 border border-gray-200 rounded-xl space-y-5">
-        <p className="text-xs uppercase tracking-widest text-gray-500 font-semibold">
-          Manual Controls
-        </p>
-        <AudioSliders
-          pitch={settings.pitch}
-          reverb={settings.reverb}
-          distortion={settings.distortion}
-          volume={settings.volume}
-          onPitch={(v) => handleSliderChange('pitch', v)}
-          onReverb={(v) => handleSliderChange('reverb', v)}
-          onDistortion={(v) => handleSliderChange('distortion', v)}
-          onVolume={(v) => handleSliderChange('volume', v)}
-        />
+      <div className="space-y-3">
+        <label htmlFor="audio-output" className="block text-sm font-semibold">4. Send to your call app</label>
+        <select id="audio-output" className={selectClass} value={output} disabled={!active || busy || !canRoute} onChange={(event) => route(event.target.value)}>
+          <option value="">Output off — select virtual cable</option>
+          {devices.filter((device) => device.kind === 'audiooutput' && device.deviceId && !['default', 'communications'].includes(device.deviceId)).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Output ${index + 1}`}</option>)}
+        </select>
+        <p className="text-xs text-gray-600">{canRoute ? 'Choose CABLE Input here, then CABLE Output as the microphone in Discord, Zoom or your call app. On Mac, choose BlackHole in both. Keep this tab open.' : 'This browser cannot select an output device. Try a desktop browser with output selection support; recording and monitoring are still available.'}</p>
+        {output && <p role="status" className="text-sm font-medium">Sending processed audio to the selected output. Test it in your call app before joining a call.</p>}
       </div>
     </div>
   );

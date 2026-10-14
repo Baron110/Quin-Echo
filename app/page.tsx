@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import VoiceStudio from '@/components/VoiceStudio';
 
 export default function Home() {
@@ -6,14 +7,14 @@ export default function Home() {
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <span
               className="text-xl font-bold tracking-tight"
               style={{ fontFamily: 'var(--font-fraunces)' }}
             >
               Quin-Echo
             </span>
-          </a>
+          </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-gray-600">
             <a href="#how-it-works" className="hover:text-black transition-colors">
               How it works
@@ -59,7 +60,7 @@ export default function Home() {
           <div className="flex flex-wrap gap-4 text-sm">
             {[
               { label: '8', sublabel: 'voice presets' },
-              { label: '<20ms', sublabel: 'latency' },
+              { label: 'Local', sublabel: 'audio processing' },
               { label: '100%', sublabel: 'browser-native' },
             ].map((stat) => (
               <div key={stat.label} className="border border-gray-200 rounded-xl px-5 py-3">
@@ -124,7 +125,7 @@ export default function Home() {
               {
                 step: '01',
                 title: 'Open Studio',
-                desc: 'Open this page in Chrome or Firefox on your desktop.',
+                desc: 'Open this page in a desktop browser with audio output selection.',
               },
               {
                 step: '02',
@@ -134,7 +135,7 @@ export default function Home() {
               {
                 step: '03',
                 title: 'Pick Preset',
-                desc: 'Select a voice preset or fine-tune with the sliders.',
+                desc: 'Select an effect and record a short test to hear the result.',
               },
               {
                 step: '04',
@@ -144,7 +145,7 @@ export default function Home() {
               {
                 step: '05',
                 title: 'Make Calls',
-                desc: 'In WhatsApp / Discord, set "VB-Cable" or "BlackHole" as your mic.',
+                desc: 'Select the cable output in this studio and its recording device in your call app.',
               },
             ].map((item) => (
               <div key={item.step} className="space-y-3">
@@ -185,10 +186,10 @@ export default function Home() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {[
-                { platform: 'WhatsApp Desktop', status: '✓', note: 'Select VB-Cable as mic', ok: true },
-                { platform: 'Discord', status: '✓', note: 'Works natively', ok: true },
+                { platform: 'WhatsApp Desktop', status: '✓', note: 'Select CABLE Output as mic', ok: true },
+                { platform: 'Discord', status: '✓', note: 'Requires virtual audio routing', ok: true },
                 { platform: 'Zoom', status: '✓', note: 'Set virtual mic in audio settings', ok: true },
-                { platform: 'Google Meet', status: '✓', note: 'Chrome required', ok: true },
+                { platform: 'Google Meet', status: '✓', note: 'Requires virtual audio routing', ok: true },
                 { platform: 'Telegram Desktop', status: '✓', note: 'Works with VB-Cable', ok: true },
                 { platform: 'WhatsApp Mobile', status: '✗', note: 'Mobile browsers block mic routing', ok: false },
                 { platform: 'iPhone / iPad', status: '✗', note: 'iOS Safari restrictions', ok: false },
@@ -246,7 +247,8 @@ export default function Home() {
                 <li>Download from vb-audio.com/Cable</li>
                 <li>Install and restart your PC</li>
                 <li>Open Quin-Echo in Chrome</li>
-                <li>In WhatsApp/Discord, select "CABLE Input" as microphone</li>
+                <li>In this studio, select &quot;CABLE Input&quot; as output</li>
+                <li>In your call app, select &quot;CABLE Output&quot; as microphone</li>
               </ol>
               <a
                 href="https://vb-audio.com/Cable/"
@@ -278,9 +280,9 @@ export default function Home() {
               </p>
               <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
                 <li>Install via Homebrew: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">brew install blackhole-2ch</code></li>
-                <li>Create Aggregate Device in Audio MIDI Setup</li>
+                <li>In this studio, select &quot;BlackHole 2ch&quot; as output</li>
                 <li>Open Quin-Echo in Chrome</li>
-                <li>Select "BlackHole 2ch" as mic in your call app</li>
+                <li>Select &quot;BlackHole 2ch&quot; as mic in your call app</li>
               </ol>
               <a
                 href="https://existential.audio/blackhole/"

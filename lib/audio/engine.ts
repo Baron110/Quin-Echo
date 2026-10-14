@@ -26,13 +26,15 @@ export class AudioEngine {
     this.onStatusChange?.(s);
   }
 
-  async start(): Promise<MediaStream> {
+  async start(deviceId?: string): Promise<MediaStream> {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone access requires HTTPS or localhost.');
       this.ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
 
       // Get mic — disable all browser processing so we get raw audio
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
@@ -40,6 +42,7 @@ export class AudioEngine {
           channelCount: 1,
         },
       });
+      await this.ctx.resume();
 
       this.sourceNode = this.ctx.createMediaStreamSource(this.stream);
 
@@ -53,8 +56,7 @@ export class AudioEngine {
         });
         this.useWorklet = true;
       } catch {
-        console.warn('AudioWorklet unavailable, using passthrough');
-        this.useWorklet = false;
+        throw new Error('The voice processor could not load. Reload the page and try again.');
       }
 
       // Reverb via convolution
@@ -92,12 +94,11 @@ export class AudioEngine {
       // Output
       this.outputGainNode.connect(this.analyserNode);
       this.analyserNode.connect(this.destinationNode);
-      // Also route to speakers so user can monitor
-      this.analyserNode.connect(this.ctx.destination);
 
       this.setStatus('active');
       return this.destinationNode.stream;
     } catch (err) {
+      this.stop();
       this.setStatus('error');
       throw err;
     }
@@ -131,13 +132,13 @@ export class AudioEngine {
           pitch: preset.pitch,
           formant: preset.formant,
           distortion: preset.distortion,
-          volume: preset.volume,
         },
       });
     }
 
     // Reverb mix
     this.updateReverb(preset.reverb);
+    this.updateSettings({ volume: preset.volume });
   }
 
   updateSettings(settings: Partial<AudioSettings>) {
@@ -185,6 +186,10 @@ export class AudioEngine {
 
   getAnalyser(): AnalyserNode | null {
     return this.analyserNode;
+  }
+
+  getOutputStream(): MediaStream | null {
+    return this.destinationNode?.stream ?? null;
   }
 
   isUsingWorklet(): boolean {
